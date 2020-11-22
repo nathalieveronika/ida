@@ -1,5 +1,5 @@
 ---
-title: "Assistent 2 - IDA"
+title: "Assignment 2 - IDA"
 author: "Nathalie Lieckfeld"
 date: "17 11 2020"
 output:
@@ -167,14 +167,14 @@ Now we can use the algorithm, setting the starting value to (0.1, 1, 0.5, 2) and
 result = em.mixture(y = dataex5, theta0 = c(0.1, 1, 0.5, 2), eps = 0.00001)
 ```
 
-We obtain the following results for $p, \mu, \sigma, \lambda$:
+We obtain the following results for $p, \mu, \sigma^2, \lambda$:
 ```{r}
 p  = result[1]
 mu = result[2]
 sigma = result[3]
 lambda = result[4]
 
-p; mu; sigma; lambda
+p; mu; sigma^2; lambda
 ```
 
 Finally, we visualize our result by drawing a histogram of the data together with the estimated density superimposed: 
