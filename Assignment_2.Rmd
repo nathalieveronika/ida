@@ -1,0 +1,203 @@
+---
+title: "Assistent 2 - IDA"
+author: "Nathalie Lieckfeld"
+date: "17 11 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Question 2
+## b)
+
+Determine the MLE of $\mu$ based on the data available in the file `dataex2.Rdata`. Consider $\sigma ^2$ known and equal to $1.5^2$.
+
+Firstly, load the data:
+```{r load_data}
+load("dataex2.Rdata")
+```
+
+
+Then, we continue with the determination of the maximum likelihood estimate. We can simply use the log-likelihood of the observed data, which was provided in 2a). Using `optim` with method `Brent` and a starting value $4$, we determine a MLE of $\hat \mu \approx 5.533$. 
+```{r, include = TRUE, message = FALSE, warning = FALSE}
+library(maxLik)
+
+# --- storing X's and R's separately
+X = dataex2$X
+R = dataex2$R
+
+# --- create a function for the log likelihood
+set.seed(1)
+logl = function(x, r, mu){
+  sum(r * log(dnorm(x, mean = mu, sd = 1.5)) + (1 - r) * log(pnorm(x, mean = mu, sd = 1.5)))
+}
+
+# --- using optim to find the MLE for mu, 
+opt = optim(par = c(4), fn = logl, x = X, r = R, 
+      method = "Brent", lower = -50, upper = 50,
+      control = list("fnscale" = -1)) # minimise log likelihood
+
+# --- ANSWER:
+opt$par
+
+# not working with maxLik!
+# maxLik(logLik = logl, X, R, start = c(3))
+
+```
+\pagebreak
+
+# Question 4
+
+Assuming ignorability, derive and implement an EM algorithm to compute the MLE for $\beta = (\beta_0, \beta_1)$ based on the data available in in the file `dataex4.Rdata`
+
+First part for this question was done above. 
+
+This is the data we are using:
+```{r}
+load("dataex4.Rdata")
+```
+
+Let us continue with the EM algorithm:
+```{r}
+# to find the missing and observed values 
+missing_index = which(is.na(dataex4$Y))
+
+X_complete = dataex4$X
+X_miss = dataex4$X[missing_index] # X_miss are not missing X values!
+# They correspond to the missing Y values
+X_obs = dataex4$X[-missing_index]
+Y_obs = dataex4$Y[-missing_index]
+
+#--- p_i(beta)
+p = function(X, beta_old){
+  a = exp(beta_old[1] + X * beta_old[2])
+  b = 1 + exp(beta_old[1] + X * beta_old[2])
+  return = a / b
+}
+
+#--- E-step
+cond_exp = function(beta, beta_old){
+  beta0 = beta[1]
+  beta1 = beta[2]
+  E1 = sum(Y_obs * (beta0 + X_obs * beta1))
+  E2 = sum(p(X_miss, beta_old) * (beta0 + X_miss * beta1))
+  E3 = sum(log(1 + exp(beta0 + X_complete * beta1)))
+  return(E1 + E2 - E3)
+}
+
+#--- M-step
+algo = function(beta_initial, eps){
+  diff = 1
+  beta = beta_initial
+  while(diff > eps){
+    beta.old = beta
+    # optimise con_exp with respect to beta - starting value beta.old
+    opt = optim(beta.old, fn = cond_exp, beta_old = beta.old, 
+                control = list("fnscale" = -1))
+    beta0 = opt$par[1]
+    beta1 = opt$par[2]
+    beta = c(beta0, beta1)
+    diff = sum(abs(beta - beta.old))
+  }
+  return(beta)
+}
+
+```
+
+Now these are our MLE estimates for $\beta_0$ and $\beta_1$, respectively: 
+```{r}
+algo(c(1,1), 0.000001)
+```
+
+
+\pagebreak
+
+# Question 5 b)
+Using the dataset `dataex5.Rdata` implement the algorithm and find the
+maximum likelihood estimates for each component of $\theta$. Draw the histogram of the data
+with the estimated density superimposed.
+
+
+First step is to load the data:
+```{r}
+load("dataex5.Rdata")
+```
+
+Then we are ready to implement the actual EM algorithm with the derivations from 5a).
+```{r}
+em.mixture = function(y, theta0, eps){
+  theta = theta0
+  
+  p = theta[1]
+  mu = theta[2]
+  sigma = theta[3]
+  lambda = theta[4]
+  
+  diff = 1
+  while(diff > eps){ # repeat until convergence crit is reached
+    theta.old = theta
+  
+    # E-step as in 5a)
+    ptilde1 = p * dlnorm(y, meanlog = mu, sdlog = sigma) 
+    ptilde2 = ptilde1 + (1 - p) * dexp(y, rate = lambda)
+    ptilde = ptilde1 / ptilde2
+    
+    # M-step as in 5b)
+    p = mean(ptilde)
+    mu = sum(ptilde * log(y)) / sum(ptilde)
+    sigma = sqrt(sum(ptilde * (log(y) - mu)^2) / sum(ptilde))
+    lambda = sum(1 - ptilde) / sum((1 - ptilde) * y)
+    
+    theta = c(p, mu, sigma, lambda)
+    diff = sum(abs(theta - theta.old))
+  }
+  return(theta)
+}
+
+```
+
+
+Now we can use the algorithm, setting the starting value to (0.1, 1, 0.5, 2) and $\epsilon=0.00001$.
+
+```{r}
+result = em.mixture(y = dataex5, theta0 = c(0.1, 1, 0.5, 2), eps = 0.00001)
+```
+
+We obtain the following results for $p, \mu, \sigma, \lambda$:
+```{r}
+p  = result[1]
+mu = result[2]
+sigma = result[3]
+lambda = result[4]
+
+p; mu; sigma; lambda
+```
+
+Finally, we visualize our result by drawing a histogram of the data together with the estimated density superimposed: 
+```{r}
+hist(dataex5, main = "dataex5",
+     xlab = "y", 
+     ylab = "Density",
+     cex.main = 1.5, cex.lab = 1.5, cex.axis = 1.4,
+     freq = F, ylim = c(0,0.5),
+     breaks = 60)
+curve(p * dlnorm(x,  mu, sigma) + (1 - p) * dexp(x, lambda),
+      add = TRUE, lwd = 2, col = "blue")
+```
+
+As you can see, most values of `dataex5` lie between 0 and 40. Hence, let us "zoom in" and only plot this interval and also refine the histogram even more: 
+
+```{r}
+hist(dataex5, main = "dataex5",
+     xlab = "y", 
+     ylab = "Density",
+     cex.main = 1.5, cex.lab = 1.5, cex.axis = 1.4,
+     freq = F, ylim = c(0,0.5),
+     xlim = c(-1, 40), breaks = 100) # only y in (-1, 40) and more histogram bars
+curve(p * dlnorm(x,  mu, sigma) + (1 - p) * dexp(x, lambda),
+      add = TRUE, lwd = 2, col = "blue")
+```
